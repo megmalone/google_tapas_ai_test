@@ -1,0 +1,252 @@
+import pandas as pd
+from transformers import pipeline
+#import csv
+
+#%% Create a dataframe from Raleigh, NC real estate data downloaded Nov 10, 2023
+
+path = ‘RealEstData11102023.csv'
+data = pd.read_csv(path)
+print(data.head())
+
+#%% Select a random sample of 10,000 values for this testing
+
+sample = data.sample(n = 10000)
+print(sample.head())
+
+#%% Calculate frequency of missing values and drop columns accordingly
+
+null_percentage = sample.isnull().mean() * 100
+
+sample = sample.drop(['Street_Misc', 'Fire_District', 'Special_District1',
+                     'Special_District2', 'Special_District3', 'Street_pavement',
+                     'TOPOGRAPHY', 'Special_Write_In', 'COMMON_WALL',
+                     'ROOF', 'Roof_Floor_System', 'Floor_Finish', 'Interior_Finish',
+                     'Interior_Finish1', 'Interior_Finish1_percent', 'Interior_Finish2',
+                     'Interior_Finish2_percent', 'Built_in2_Description', 'Built_in3_Description',
+                     'Built_in4_Description', 'Built_in5_Description', 'Land_Deferred_code',
+                     'Historic_Deferred_code', 'Land_Deferred_Amount', 'Historic_Deferred_Amount',
+                     'Land_Disq_and_Qual_flag'], axis = 1)
+
+#%% Calculate the count of unique values and drop additional columns accordingly
+
+unique_count_per_column = sample.nunique()
+
+sample = sample.drop(['NUM_of_Rooms'], axis = 1)
+
+#%% Dropping additional columns with duplicate or extraneous data
+
+sample = sample.drop(['CARD_NUMBER', 'NUMBER_OF_CARDS', 'Street_Number', 
+                      'Street_Prefix', 'Street_Name', 'Street_Type',
+                      'Street_Suffix', 'Parcel_Identification', 'DEED_BOOK',
+                      'DEED_PAGE', 'Deed_Date', 'VCS', 'PROPERTY_INDEX',
+                      'Disq_and_Qual_flag', 'RECYCLED_UNITS', 'Accrued_Assessed_Condition_Pct',
+                      'Assessed_Grade_Difference', 'GRADE', 'BATH_FIXTURES',
+                      'AIR_PERCENT', 'HEAT_PERCENT', 'Foundation_Basement_Percent',
+                      'Township', 'CITY'], axis = 1)
+
+#%% Replacing values with categorical descriptions as needed
+
+jurisdiction_dict = {'AP': 'Apex',
+                    'AN': 'Angier',
+                    'CA': 'Cary',
+                    'CL': 'Clayton',
+                    'DU': 'Durham',
+                    'FD': 'Fire District',
+                    'FV': 'Fuquay Varina',
+                    'GA': 'Garner',
+                    'HS': 'Holly Springs',
+                    'KN': 'Knightdale',
+                    'MO': 'Morrisville',
+                    'RA': 'Raleigh',
+                    'RD': 'RDU Airport',
+                    'RO': 'Rolesville',
+                    'WC': 'Wake County',
+                    'WE': 'Wendell',
+                    'WF': 'Wake Forest',
+                    'ZB': 'Zebulon'}
+sample['Planning_Jurisdiction'] = sample['Planning_Jurisdiction'].replace(jurisdiction_dict)
+
+bath_dict = {'A': 1,
+             'B': 1.5,
+             'C': 2,
+             'D': 2.5,
+             'E': 3,
+             'F': 3.5,
+             'G': 0,
+             'H': 0,
+             'I': 0,
+             'J': 0}
+sample['BATH'] = sample['BATH'].replace(bath_dict)
+
+heat_dict = {'A': 'Forced Air',
+             'K': 'Heat Pump',
+             'C': 'Steam',
+             'D': 'Electric',
+             'E': 'No Automatic Burner',
+             'F': 'Partial Forced Air',
+             'G': 'Unit Heaters',
+             'H': 'Central System Units',
+             'I': 'Limited/Partial',
+             'J': 'No',
+             'B': 'Hot Water',
+             'L': 'Solar'}
+sample['HEAT'] = sample['HEAT'].replace(heat_dict)
+
+air_dict = {'A': 'Separate',
+            'B': 'Combined',
+            'C': 'Unit Air Conditioner',
+            'D': 'Partial Separate',
+            'E': 'Partial Combined',
+            'F': 'Partial Unit',
+            'G': 'Limited/Partial',
+            'H': 'No',
+            'I': 'Partial Climate Control'}
+sample['AIR'] = sample['AIR'].replace(air_dict)
+
+extwall_dict = {'A': 'Frame',
+                'B': 'Brick',
+                'C': 'C-Block',
+                'D': 'Brick & Frame',
+                'E': 'Brick & C-Block',
+                'F': 'C-Block & Frame',
+                'V': 'C-Block & Metal',
+                'G': 'Stucco',
+                'H': 'Stucco Masonry',
+                'I': 'Stone',
+                'J': 'Stone & Frame',
+                'K': 'Stone & Brick',
+                'L': 'SGL FR Siding',
+                'M': 'Reinforced Concrete',
+                'N': 'Enameled Steel',
+                'O': 'Metal',
+                'R': 'Brick & Metal',
+                'P': 'Insulated Panel',
+                'S': 'Precast Concrete',
+                'T': 'Solar Glass',
+                'U': 'Glass Aluminum',
+                'W': 'Simulated Brick',
+                'X': 'Simulated Stone',
+                'Y': 'Factory Sash',
+                'Z': 'Aluminum Vinyl Siding',
+                'Q': 'Log'}
+sample['Exterior_Wall'] = sample['Exterior_Wall'].replace(extwall_dict)
+
+basement_dict = {'A': 'Full Basement',
+                 'B': 'Partial Basement',
+                 'C': 'Pier Foundation',
+                 'D': 'No Basement'}
+sample['Foundation_Basement'] = sample['Foundation_Basement'].replace(basement_dict)
+
+design_dict = {'A': 'Conventional',
+               'B': 'Duplex',
+               'C': 'Townhouse',
+               'D': 'Condo',
+               'E': 'Conversion',
+               'F': 'Colonial',
+               'G': 'Ranch',
+               'H': 'Cape',
+               'I': 'Split Level',
+               'J': 'Split Foyer',
+               'K': 'Contemporary',
+               'L': 'Log',
+               'M': 'Manufactured Single Family',
+               'N': 'Manufactured Multi Family',
+               'O': 'Modular'}
+sample['DESIGN_STYLE'] = sample['DESIGN_STYLE'].replace(design_dict)
+
+story_dict = {'A': 1,
+              'B': 1.5,
+              'C': 2,
+              'D': 2.5,
+              'E': 3,
+              'F': 3.5,
+              'G': 4,
+              'H': 'Multi',
+              'I': 1.75,
+              'J': 1.4,
+              'K': 1.63,
+              'L': 1.88,
+              'M': 2.4,
+              'N': 2.63,
+              'R': 2.75}
+sample['Story_Height'] = sample['Story_Height'].replace(story_dict)
+
+land_dict = {'A': 'AC-W/IMP',
+                'B': 'AC>10-HS',
+                'C': 'Commercial',
+                'D': 'Industrial',
+                'E': 'Exempt',
+                'F': 'Agri-farm',
+                'G': 'Apartment',
+                'H': 'Historic',
+                'I': 'HOA',
+                'J': 'Cemetery',
+                'K': 'Retirement Home',
+                'L': 'Leased',
+                'M': 'MFG Home',
+                'N': 'Condo',
+                'O': 'MA & Condo',
+                'R': 'Part Exempt',
+                'P': 'R<10-HS',
+                'S': 'ST ASSESS',
+                'T': 'Mobile Home Park',
+                'U': 'Golf Course',
+                'W': 'Vacant',
+                'X': 'Water/Sewer',
+                'Y': 'For-farm',
+                'Z': 'Hor-farm',
+                'Q': 'Log'}
+sample['Land_classification'] = sample['Land_classification'].replace(land_dict)
+
+billing_dict = {1: 'Corporation',
+                2: 'Individual(s)',
+                3: 'Exempt',
+                4: 'Public Service',
+                5: 'Life Estate',
+                6: 'HOA'}
+sample['BILLING_CLASS'] = sample['BILLING_CLASS'].replace(billing_dict)
+
+# Convert Zip Code to string
+sample['PHYSICAL_ZIP_CODE'] = sample['PHYSICAL_ZIP_CODE'].astype(str)
+sample['PHYSICAL_ZIP_CODE'] = sample['PHYSICAL_ZIP_CODE'].str.replace('.0', '')
+
+#%%
+
+def create_sentences(row):
+    details = ''
+    # Ownership
+    details += f"The owner(s) of {row['Mailing_address1']} {row['PHYSICAL_CITY']}, NC {row['PHYSICAL_ZIP_CODE']} are {row['OWNER']}"
+    if not pd.isnull(row['OWNER2']): details += f" and {row['OWNER2']}"
+    details += f" a {row['BILLING_CLASS']} buying entity."
+    # Location
+    if not pd.isnull(row['Zoning']): details += f" The property is in the {row['Zoning']} zoning district."
+    details += f" The property is {row['Deeded_Acreage']} acres."
+    if not pd.isnull(row['PROPERTY_DESCRIPTION']): details += f" The property is described as {row['PROPERTY_DESCRIPTION']}."
+    details += f" The land is classified as {row['Land_classification']}."
+    # Sale(s)
+    details += f" It was sold for ${row['Total_sale_Price']}"
+    if not pd.isnull(row['Total_Sale_Date']): details += f" on {row['Total_Sale_Date']}"
+    if not pd.isnull(row['Land_Sale_Price']) and row['Land_Sale_Price'] == 0: details += f". The land was sold for ${row['Land_Sale_Price']} on {row['Land_Sale_Date']}"
+    details += f". The assessed building value is ${row['Assessed_Building_Value']} and the assessed land value is ${row['Assessed_Land_Value']}."
+    # Details
+    details += f" The structure was built in {row['Year_Built']}"
+    if not pd.isnull(row['DESIGN_STYLE']): details += f" in the {row['DESIGN_STYLE']} style"
+    if not pd.isnull(row['HEATED_AREA']): details += f", and it is approximately {row['HEATED_AREA']} square feet"
+    if not pd.isnull(row['Remodeled_Year']) and row['Remodeled_Year'] == 0: details += f". It was remodeled in {row['Remodeled_Year']}"
+    if not pd.isnull(row['Story_Height']): details += f". It is {row['Story_Height']} stories tall"
+    if not pd.isnull(row['Foundation_Basement']): details += f". It has {row['Foundation_Basement']}"
+    if not pd.isnull(row['Exterior_Wall']): details += f". The exterior is {row['Exterior_Wall']}"
+    if not pd.isnull(row['HEAT']): details += f". Heat is {row['HEAT']}"
+    if not pd.isnull(row['AIR']): details += f". Air is {row['AIR']}"
+    if not pd.isnull(row['BATH']): details += f". There are {row['BATH']} bathroom(s)"
+    if not pd.isnull(row['Built_in1_Description']): details += f". The property also features {row['Built_in1_Description']}"
+    if not pd.isnull(row['UNITS']) and row['UNITS'] != 0: details += f". The property is composed of {row['UNITS']} units"
+    details += "."
+    return details
+
+# Create a paragraph based on each row in the DataFrame
+paragraphs = [create_sentences(row) for index, row in sample.iterrows()]
+
+# Display the generated paragraphs
+#for idx, paragraph in enumerate(paragraphs, start=1):
+#    print(f"Row {idx}: {paragraph}")
