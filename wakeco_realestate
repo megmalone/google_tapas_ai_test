@@ -1,0 +1,341 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Nov 16 10:23:39 2023
+
+@author: MegMalone-Hallberg
+"""
+import pandas as pd
+from transformers import pipeline
+
+tqa = pipeline(task="table-question-answering", model="google/tapas-base-finetuned-wtq")
+# Using base model as opposed to the large model for speed
+
+#%% Create a dataframe from Raleigh, NC real estate data downloaded Nov 10, 2023
+
+path = 'C:/Users/MegMalone-Hallberg/Documents/RealEstData11102023.csv'
+data = pd.read_csv(path)
+print(data.head())
+
+#%% Calculate frequency of missing values and drop columns accordingly; not a required step but something I'm doing before I clean up the remaining columns.
+
+# null_percentage = data.isnull().mean() * 100
+
+data = data.drop(['Street_Misc', 'Fire_District', 'Special_District1',
+                  'Special_District2', 'Special_District3', 'Street_pavement',
+                  'TOPOGRAPHY', 'Special_Write_In', 'COMMON_WALL',
+                  'ROOF', 'Roof_Floor_System', 'Floor_Finish', 'Interior_Finish',
+                  'Interior_Finish1', 'Interior_Finish1_percent', 'Interior_Finish2',
+                  'Interior_Finish2_percent', 'Built_in2_Description', 'Built_in3_Description',
+                  'Built_in4_Description', 'Built_in5_Description', 'Land_Deferred_code',
+                  'Historic_Deferred_code', 'Land_Deferred_Amount', 'Historic_Deferred_Amount',
+                  'Land_Disq_and_Qual_flag','CARD_NUMBER','NUMBER_OF_CARDS','DEED_BOOK','DEED_PAGE',
+                  'Deed_Date','VCS','Disq_and_Qual_flag','RECYCLED_UNITS','Accrued_Assessed_Condition_Pct',
+                  'Assessed_Grade_Difference','GRADE','BATH_FIXTURES','AIR_PERCENT','HEAT_PERCENT',
+                  'Foundation_Basement_Percent','NUM_of_Rooms','Parcel_Identification','PROPERTY_INDEX'], axis=1)
+
+
+data['Owners'] = data.apply(lambda row: f"{row['OWNER']} & {row['OWNER2']}" 
+                                if pd.notnull(row['OWNER2']) else row['OWNER'], axis=1)
+
+data['Mailing Address'] = data.apply(lambda row: f"{row['Mailing_address1']} {row['Mailing_Address2']} {row['Mailing_Address3']}"
+                                if pd.notnull(row['Mailing_Address3']) else f"{row['Mailing_address1']} {row['Mailing_Address2']}", axis=1)
+
+data['Property Address'] = data.apply(lambda row: f"{row['Street_Number']} {row['Street_Name']} {row['Street_Type']} {row['PHYSICAL_CITY']}, NC {row['PHYSICAL_ZIP_CODE']}", axis=1)
+
+data['Property Address'] = data['Property Address'].str.replace('.0', '')
+
+data = data.drop(['OWNER','OWNER2','Mailing_address1','Mailing_Address2','Mailing_Address3',
+                      'Street_Number','Street_Name','Street_Type','Street_Prefix','Street_Suffix',
+                      'PHYSICAL_CITY','PHYSICAL_ZIP_CODE','CITY'], axis=1)
+
+jurisdiction_dict = {'AP': 'Apex',
+                     'AN': 'Angier',
+                     'CA': 'Cary',
+                     'CL': 'Clayton',
+                     'DU': 'Durham',
+                     'FD': 'Fire District',
+                     'FV': 'Fuquay Varina',
+                     'GA': 'Garner',
+                     'HS': 'Holly Springs',
+                     'KN': 'Knightdale',
+                     'MO': 'Morrisville',
+                     'RA': 'Raleigh',
+                     'RD': 'RDU Airport',
+                     'RO': 'Rolesville',
+                     'WC': 'Wake County',
+                     'WE': 'Wendell',
+                     'WF': 'Wake Forest',
+                     'ZB': 'Zebulon'}
+data['Planning_Jurisdiction'] = data['Planning_Jurisdiction'].replace(jurisdiction_dict)
+
+township_dict = {1:'Raleigh',
+                 2:"Barton's Creek",
+                 3:'Buckhorn',
+                 4:'Cary',
+                 5:'Cedar Fork',
+                 6:'Holly Springs',
+                 7:'House Creek',
+                 8:'Leesville',
+                 9:'Little River',
+                 10:"Mark's Creek",
+                 11:'Meredith',
+                 12:'Middle Creek',
+                 13:'Neuse',
+                 14:'New Light',
+                 15:'Panther Branch',
+                 16:"St Mary's",
+                 17:"St. Mattthew's",
+                 18:'Swift Creek',
+                 19:'Wake Forest',
+                 20:'White Oak'}
+data['Township'] = data['Township'].replace(township_dict)
+
+utilities_dict = {'A':'ALL',
+                  'E':'ELECTRIC',
+                  'G':'GAS',
+                  'W':'WATER',
+                  'S':'SEWER'}
+data['UTILITIES'] = data['UTILITIES'].replace(utilities_dict)
+
+bath_dict = {'A': 1,
+             'B': 1.5,
+             'C': 2,
+             'D': 2.5,
+             'E': 3,
+             'F': 3.5,
+             'G': 0,
+             'H': 0,
+             'I': 0,
+             'J': 0}
+data['BATH'] = data['BATH'].replace(bath_dict)
+
+heat_dict = {'A': 'Forced Air',
+             'K': 'Heat Pump',
+             'C': 'Steam',
+             'D': 'Electric',
+             'E': 'No Automatic Burner',
+             'F': 'Partial Forced Air',
+             'G': 'Unit Heaters',
+             'H': 'Central System Units',
+             'I': 'Limited/Partial',
+             'J': 'None',
+             'B': 'Hot Water',
+             'L': 'Solar'}
+data['HEAT'] = data['HEAT'].replace(heat_dict)
+
+air_dict = {'A': 'Separate',
+            'B': 'Combined',
+            'C': 'Unit Air Conditioner',
+            'D': 'Partial Separate',
+            'E': 'Partial Combined',
+            'F': 'Partial Unit',
+            'G': 'Limited/Partial',
+            'H': 'None',
+            'I': 'Partial Climate Control'}
+data['AIR'] = data['AIR'].replace(air_dict)
+
+extwall_dict = {'A': 'Frame',
+                'B': 'Brick',
+                'C': 'C-Block',
+                'D': 'Brick & Frame',
+                'E': 'Brick & C-Block',
+                'F': 'C-Block & Frame',
+                'V': 'C-Block & Metal',
+                'G': 'Stucco',
+                'H': 'Stucco Masonry',
+                'I': 'Stone',
+                'J': 'Stone & Frame',
+                'K': 'Stone & Brick',
+                'L': 'SGL FR Siding',
+                'M': 'Reinforced Concrete',
+                'N': 'Enameled Steel',
+                'O': 'Metal',
+                'R': 'Brick & Metal',
+                'P': 'Insulated Panel',
+                'S': 'Precast Concrete',
+                'T': 'Solar Glass',
+                'U': 'Glass Aluminum',
+                'W': 'Simulated Brick',
+                'X': 'Simulated Stone',
+                'Y': 'Factory Sash',
+                'Z': 'Aluminum Vinyl Siding',
+                'Q': 'Log'}
+data['Exterior_Wall'] = data['Exterior_Wall'].replace(extwall_dict)
+
+basement_dict = {'A': 'Full Basement',
+                 'B': 'Partial Basement',
+                 'C': 'Pier Foundation',
+                 'D': 'No Basement'}
+data['Foundation_Basement'] = data['Foundation_Basement'].replace(basement_dict)
+
+design_dict = {'A': 'Conventional',
+               'B': 'Duplex',
+               'C': 'Townhouse',
+               'D': 'Condo',
+               'E': 'Conversion',
+               'F': 'Colonial',
+               'G': 'Ranch',
+               'H': 'Cape',
+               'I': 'Split Level',
+               'J': 'Split Foyer',
+               'K': 'Contemporary',
+               'L': 'Log',
+               'M': 'Manufactured Single Family',
+               'N': 'Manufactured Multi Family',
+               'O': 'Modular'}
+data['DESIGN_STYLE'] = data['DESIGN_STYLE'].replace(design_dict)
+
+story_dict = {'A': 1,
+              'B': 1.5,
+              'C': 2,
+              'D': 2.5,
+              'E': 3,
+              'F': 3.5,
+              'G': 4,
+              'H': 'Multi',
+              'I': 1.75,
+              'J': 1.4,
+              'K': 1.63,
+              'L': 1.88,
+              'M': 2.4,
+              'N': 2.63,
+              'R': 2.75}
+data['Story_Height'] = data['Story_Height'].replace(story_dict)
+
+land_dict = {'A': 'AC-W/IMP',
+             'B': 'AC>10-HS',
+             'C': 'Commercial',
+             'D': 'Industrial',
+             'E': 'Exempt',
+             'F': 'Agri-farm',
+             'G': 'Apartment',
+             'H': 'Historic',
+             'I': 'HOA',
+             'J': 'Cemetery',
+             'K': 'Retirement Home',
+             'L': 'Leased',
+             'M': 'MFG Home',
+             'N': 'Condo',
+             'O': 'MA & Condo',
+             'R': 'Part Exempt',
+             'P': 'R<10-HS',
+             'S': 'ST ASSESS',
+             'T': 'Mobile Home Park',
+             'U': 'Golf Course',
+             'W': 'Vacant',
+             'X': 'Water/Sewer',
+             'Y': 'For-farm',
+             'Z': 'Hor-farm',
+             'Q': 'Log',
+             'V': 'Other'}
+data['Land_classification'] = data['Land_classification'].replace(land_dict)
+
+billing_dict = {1: 'Corporation',
+                2: 'Individual(s)',
+                3: 'Exempt',
+                4: 'Public Service',
+                5: 'Life Estate',
+                6: 'HOA'}
+data['BILLING_CLASS'] = data['BILLING_CLASS'].replace(billing_dict)
+
+data['Land_Sale_Price'] = '$' + data['Land_Sale_Price'].astype(str)
+data['Total_sale_Price'] = '$' + data['Total_sale_Price'].astype(str)
+data['Assessed_Building_Value'] = '$' + data['Assessed_Building_Value'].astype(str)
+data['Assessed_Land_Value'] = '$' + data['Assessed_Land_Value'].astype(str)
+
+# Converting all numerical columns to strings as is required by the model
+columns_to_convert = ['Deeded_Acreage','Year_Built','UNITS','HEATED_AREA','Year_of_Addition','Effective_year','Remodeled_Year','BATH','TYPE_AND_USE']
+data[columns_to_convert] = data[columns_to_convert].astype(str)
+
+columns_to_replace = ['Year_Built','Year_of_Addition','Effective_year','Remodeled_Year']
+data[columns_to_replace] = data[columns_to_replace].replace('0', 'Not Applicable')
+
+data = data.fillna('Unknown')
+
+data = data.rename(columns={'Planning_Jurisdiction':'Planning Jurisdiction',
+                                'Land_Sale_Price':'Land Sale Price',
+                                'Land_Sale_Date':'Land Sale Date',
+                                'Total_sale_Price':'Total Sale Price',
+                                'Total_Sale_Date':'Total Sale Date',
+                                'Assessed_Building_Value':'Assessed Building Value',
+                                'Assessed_Land_Value':'Assessed Land Value',
+                                'BILLING_CLASS':'Billing Class',
+                                'PROPERTY_DESCRIPTION':'Property Description',
+                                'Land_classification':'Land Classification',
+                                'Year_Built':'Year Built',
+                                'UNITS':'Units',
+                                'HEATED_AREA':'Square Feet',
+                                'UTILITIES':'Utilities',
+                                'Year_of_Addition':'Year of Addition',
+                                'Effective_year':'Year Issued',
+                                'Remodeled_Year':'Year of Remodel',
+                                'Sorty_Height':'Stories',
+                                'DESIGN_STYLE':'Building Design',
+                                'Foundation_Basement':'Basement Type',
+                                'Exterior_Wall':'Exterior Type',
+                                'HEAT':'Heating Type',
+                                'AIR':'HVAC Type',
+                                'BATH':'Count of Bathrooms',
+                                'Built_in1_Description':'Additional Features',
+                                'TYPE_AND_USE':'Building Type',
+                                'Deeded_Acreage':'Acreage'})
+
+data = data.drop(['REAL_ESTATE_ID'], axis=1)
+
+data.dtypes
+data = data.astype(str)
+
+#%%
+
+sample = data[['Owners','Property Address','Acreage','Year Built']].iloc[:10]
+sample
+
+#%%
+
+question = "What year was 1601 Wake Forest Rd built?"
+answer = tqa(table = sample, query = question)
+answer["answer"]
+
+question = "How many properties are in 27609?"
+answer = tqa(table = sample, query = question)
+answer["answer"]
+
+question = "Who owns 210 Person St?"
+answer = tqa(table = sample, query = question)
+answer["answer"]
+
+question = "What properties are more than 1 acre?"
+answer = tqa(table = sample, query = question)
+answer["answer"]
+
+question = "What properties are more than 1 acre and located in 27606?"
+answer = tqa(table = sample, query = question)
+answer["answer"]
+
+#%%
+# Test with Wiki set
+
+# from datasets import load_dataset
+# dataset = load_dataset("wikitablequestions")
+# item = dataset["test"][10]
+
+# def to_pandas(item):
+#   return pd.DataFrame(item['table']["rows"],columns=item['table']["header"])
+
+# to_pandas(item)
+
+# from transformers import TapasConfig, TapasForQuestionAnswering
+
+# # for example, the base model finetuned on SQA
+# model = TapasForQuestionAnswering.from_pretrained("google/tapas-base")
+
+# k_examples = 10
+# for item in dataset['test'].select(range(k_examples)):
+  
+#   question = item['question']
+#   table = to_pandas(item)
+#   answer = tqa(table=table, query=question)['answer']
+
+#%%
+
+data.to_csv('C:/Users/MegMalone-Hallberg/Documents/RealEstData_clean.csv', index=False) 
